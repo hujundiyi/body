@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "747092768088",
+    "project_id": "livetalent-65370",
+    "storage_bucket": "livetalent-65370.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747092768088:android:88802294802f4863afa12d",
+        "android_client_info": {
+          "package_name": "com.huankecontact.live"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWCtycFS9MKwsdLmytQiKeLRQKzTLrfRg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

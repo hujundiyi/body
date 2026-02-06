@@ -1,0 +1,80 @@
+{
+  "name": "Live-chat",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "vue-cli-service serve --mode development",
+    "serve:test": "vue-cli-service serve --mode test",
+    "serve:prod": "vue-cli-service serve --mode production",
+    "build:test": "vue-cli-service build --mode test",
+    "build:prod": "vue-cli-service build --mode production --source-map",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "@babel/plugin-transform-runtime": "^7.18.9",
+    "@babel/runtime": "^7.18.9",
+    "@tencentcloud/chat": "^3.2.9",
+    "@vue/babel-helper-vue-jsx-merge-props": "^1.4.0",
+    "@vue/babel-preset-jsx": "^1.4.0",
+    "agora-rtc-sdk-ng": "^4.20.0",
+    "agora-rtm-sdk": "1.5.1",
+    "axios": "0.24.0",
+    "babel-plugin-import": "^1.13.5",
+    "core-js": "^3.8.3",
+    "crypto-js": "^4.1.1",
+    "install": "^0.13.0",
+    "js-cookie": "3.0.1",
+    "less": "^4.1.3",
+    "less-loader": "^11.0.0",
+    "style-resources-loader": "^1.5.0",
+    "svga": "^2.1.1",
+    "thinkingdata-browser": "^2.3.1",
+    "tim-profanity-filter-plugin": "^1.1.0",
+    "tim-upload-plugin": "^1.3.0",
+    "trtc-sdk-v5": "^5.15.1",
+    "vconsole": "^3.15.1",
+    "vue": "^2.6.14",
+    "vue-awesome-swiper": "3.1.3",
+    "vue-cli-plugin-style-resources-loader": "^0.1.5",
+    "vue-i18n": "^6.1.3",
+    "vue-router": "3.4.9",
+    "vuex": "3.6.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.18.9",
+    "@babel/eslint-parser": "^7.12.16",
+    "@vue/cli-plugin-babel": "~5.0.0",
+    "@vue/cli-plugin-eslint": "~5.0.0",
+    "@vue/cli-service": "~5.0.0",
+    "babel-eslint": "^10.0.3",
+    "babel-plugin-transform-remove-console": "^6.9.4",
+    "compression-webpack-plugin": "5.0.2",
+    "eslint": "^7.32.0",
+    "eslint-plugin-vue": "^8.0.3",
+    "sass": "^1.97.2",
+    "sass-loader": "^13.0.2",
+    "unplugin-vue-components": "^0.21.1",
+    "vue-template-compiler": "^2.6.14"
+  },
+  "eslintConfig": {
+    "root": true,
+    "env": {
+      "node": true
+    },
+    "extends": [
+      "plugin:vue/essential",
+      "eslint:recommended"
+    ],
+    "parserOptions": {
+      "parser": "@babel/eslint-parser"
+    },
+    "rules": {
+      "no-debugger": "off",
+      "no-unused-vars": "off"
+    }
+  },
+  "browserslist": [
+    "Android >= 4.0",
+    "iOS >= 8"
+  ]
+}

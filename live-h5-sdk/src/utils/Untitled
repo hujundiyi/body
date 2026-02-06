@@ -1,0 +1,503 @@
+/**
+ * Agora RTM 管理器单例 (适配 agora-rtm-sdk 1.5.1 版本)
+ * 用于在通话中进行实时消息收发
+ *
+ * 使用流程：
+ * 1. 应用启动时调用 login() 登录 RTM
+ * 2. 进入通话时调用 joinChannel() 加入频道
+ * 3. 离开通话时调用 leaveChannel() 离开频道
+ * 4. 应用退出时调用 logout() 登出 RTM
+ */
+import AgoraRTM from "agora-rtm-sdk";
+import store from "@/store";
+import { getRtmToken } from "@/api/sdk/call";
+
+// 自定义消息类型（与 TencentImUtils 保持一致）
+export const RTM_MSG_TYPE = {
+  TEXT: 'MSG_TEXT',           // 文本消息
+  CUSTOM: 'MSG_CUSTOM',       // 自定义消息
+  GIFT: 2000,                 // 礼物消息类型
+};
+
+class AgoraRTMManager {
+  constructor() {
+    // 单例实例
+    if (AgoraRTMManager.instance) {
+      return AgoraRTMManager.instance;
+    }
+    AgoraRTMManager.instance = this;
+
+    // RTM 客户端
+    this.rtmClient = null;
+    // RTM 频道
+    this.rtmChannel = null;
+    // 当前频道名称
+    this.currentChannel = null;
+    // 是否已登录
+    this.isLoggedIn = false;
+    // 是否已加入频道
+    this.isJoinedChannel = false;
+    // 消息回调函数
+    this.onMessageCallback = null;
+    // 当前用户 ID
+    this.currentUserId = null;
+    // App ID
+    this.appId = null;
+    // RTM Token
+    this.rtmToken = null;
+  }
+
+  /**
+   * 获取单例实例
+   */
+  static getInstance() {
+    if (!AgoraRTMManager.instance) {
+      AgoraRTMManager.instance = new AgoraRTMManager();
+    }
+    return AgoraRTMManager.instance;
+  }
+
+  /**
+   * 登录 RTM（应用启动时调用）
+   * @param {string} appId - Agora App ID
+   * @param {string|number} userId - 用户 ID
+   * @returns {Promise<boolean>}
+   */
+  async login(appId, userId) {
+    // 如果已经登录，直接返回
+    if (this.isLoggedIn && this.rtmClient) {
+      console.log('[📨AgoraRTMManager] 已登录，跳过');
+      return true;
+    }
+
+    try {
+      console.log('[📨AgoraRTMManager] 开始登录 RTM...', { appId, userId });
+
+      this.appId = appId;
+      this.currentUserId = String(userId);
+
+      // 1. 获取 RTM Token
+      console.log('[📨AgoraRTMManager] 获取 RTM Token...');
+      const tokenResponse = await getRtmToken();
+      if (!tokenResponse || !tokenResponse.success) {
+        throw new Error('获取 RTM Token 失败');
+      }
+      this.rtmToken = tokenResponse.data?.rtmToken || tokenResponse.data;
+      console.log("appid", appId);
+      console.log("userId", this.currentUserId);
+      console.log('[📨AgoraRTMManager] ✅ RTM Token 获取成功', this.rtmToken);
+
+      // 2. 创建 RTM 客户端 (RTM 1.x 方式)
+      this.rtmClient = AgoraRTM.createInstance(appId);
+      console.log('[📨AgoraRTMManager] ✅ RTM Client 创建成功');
+
+      // 3. 设置事件监听
+      this._setupEventListeners();
+
+      // 4. 登录 RTM (RTM 1.x 方式)
+      console.log('[📨AgoraRTMManager] 登录 RTM...');
+      await this.rtmClient.login({
+        uid: this.currentUserId,
+        token: this.rtmToken
+      });
+      this.isLoggedIn = true;
+      console.log('[📨AgoraRTMManager] ✅ RTM 登录成功');
+
+      return true;
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 登录失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 加入频道（进入通话时调用）
+   * @param {string} channelName - 频道名称（通话编号）
+   * @returns {Promise<boolean>}
+   */
+  async joinChannel(channelName) {
+    if (!this.isLoggedIn || !this.rtmClient) {
+      throw new Error('RTM 未登录，请先调用 login()');
+    }
+
+    // 如果已经在同一个频道中，直接返回
+    if (this.isJoinedChannel && this.currentChannel === channelName) {
+      console.log('[📨AgoraRTMManager] 已在频道中，跳过');
+      return true;
+    }
+
+    // 如果在其他频道中，先离开
+    if (this.isJoinedChannel && this.currentChannel !== channelName) {
+      await this.leaveChannel();
+    }
+
+    try {
+      console.log('[📨AgoraRTMManager] 加入频道:', channelName);
+      this.currentChannel = channelName;
+
+      // RTM 1.x 使用 createChannel + join
+      this.rtmChannel = this.rtmClient.createChannel(channelName);
+      this._setupChannelEventListeners();
+      await this.rtmChannel.join();
+
+      this.isJoinedChannel = true;
+      console.log('[📨AgoraRTMManager] ✅ 加入频道成功');
+
+      return true;
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 加入频道失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 离开频道（离开通话时调用）
+   * @returns {Promise<boolean>}
+   */
+  async leaveChannel() {
+    if (!this.rtmChannel || !this.isJoinedChannel) {
+      return true;
+    }
+
+    try {
+      console.log('[📨AgoraRTMManager] 离开频道:', this.currentChannel);
+
+      // RTM 1.x 使用 channel.leave()
+      await this.rtmChannel.leave();
+
+      this.rtmChannel = null;
+      this.currentChannel = null;
+      this.isJoinedChannel = false;
+      // 移除消息回调
+      this.offMessageReceived();
+      console.log('[📨AgoraRTMManager] ✅ 离开频道成功');
+
+      return true;
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 离开频道失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 登出 RTM（应用退出时调用）
+   * @returns {Promise<boolean>}
+   */
+  async logout() {
+    try {
+      // 先离开频道
+      if (this.isJoinedChannel) {
+        await this.leaveChannel();
+      }
+
+      // 登出 RTM
+      if (this.rtmClient && this.isLoggedIn) {
+        console.log('[📨AgoraRTMManager] 登出 RTM...');
+        await this.rtmClient.logout();
+        console.log('[📨AgoraRTMManager] ✅ RTM 登出成功');
+      }
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 登出失败:', error);
+    }
+
+    // 重置状态
+    this.rtmClient = null;
+    this.isLoggedIn = false;
+    this.rtmToken = null;
+
+    return true;
+  }
+
+  /**
+   * 设置 RTM 客户端事件监听 (RTM 1.x 方式)
+   */
+  _setupEventListeners() {
+    if (!this.rtmClient) return;
+
+    // 连接状态变化 (RTM 1.x)
+    this.rtmClient.on('ConnectionStateChanged', (newState, reason) => {
+      console.log('[📨AgoraRTMManager] 连接状态变化:', newState, reason);
+    });
+
+    // 收到点对点消息 (RTM 1.x)
+    this.rtmClient.on('MessageFromPeer', (message, peerId) => {
+      console.log('[📨AgoraRTMManager] 收到点对点消息:', message, 'from:', peerId);
+      this._handleReceivedMessage(message, peerId);
+    });
+
+    // Token 即将过期 (RTM 1.x)
+    this.rtmClient.on('TokenExpired', async () => {
+      console.log('[📨AgoraRTMManager] Token 即将过期，尝试续期...');
+      try {
+        const tokenResponse = await getRtmToken();
+        if (tokenResponse && tokenResponse.success) {
+          const newToken = tokenResponse.data?.rtmToken || tokenResponse.data;
+          this.rtmToken = newToken;
+          await this.rtmClient.renewToken(newToken);
+          console.log('[📨AgoraRTMManager] ✅ Token 续期成功');
+        }
+      } catch (error) {
+        console.error('[📨AgoraRTMManager] Token 续期失败:', error);
+      }
+    });
+  }
+
+  /**
+   * 设置频道事件监听 (RTM 1.x 方式)
+   */
+  _setupChannelEventListeners() {
+    if (!this.rtmChannel) return;
+
+    // 收到频道消息 (RTM 1.x)
+    this.rtmChannel.on('ChannelMessage', (message, memberId) => {
+      console.log('[📨AgoraRTMManager] 收到频道消息:', message, 'from:', memberId);
+      this._handleReceivedMessage(message, memberId);
+    });
+
+    // 频道成员加入 (RTM 1.x)
+    this.rtmChannel.on('MemberJoined', (memberId) => {
+      console.log('[📨AgoraRTMManager] 成员加入频道:', memberId);
+    });
+
+    // 频道成员离开 (RTM 1.x)
+    this.rtmChannel.on('MemberLeft', (memberId) => {
+      console.log('[📨AgoraRTMManager] 成员离开频道:', memberId);
+    });
+  }
+
+  /**
+   * 处理接收到的消息 (RTM 1.x 格式)
+   * @param {Object} message - RTM 消息对象
+   * @param {string} senderId - 发送者 ID
+   */
+  _handleReceivedMessage(message, senderId) {
+    try {
+      // RTM 1.x 的消息格式是 { text: '...' }
+      const messageText = message.text;
+
+      // 解析消息内容
+      let parsedMessage;
+      try {
+        parsedMessage = JSON.parse(messageText);
+      } catch (e) {
+        // 如果不是 JSON，则作为纯文本处理
+        parsedMessage = {
+          type: RTM_MSG_TYPE.TEXT,
+          payload: { text: messageText }
+        };
+      }
+
+      // 构造兼容腾讯 IM 格式的消息对象
+      const formattedMessage = this._formatMessageForDisplay(parsedMessage, senderId);
+
+      // 触发消息回调
+      if (this.onMessageCallback) {
+        this.onMessageCallback({
+          data: [formattedMessage]
+        });
+      }
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 处理消息失败:', error);
+    }
+  }
+
+  /**
+   * 格式化消息为显示格式（兼容腾讯 IM 消息格式）
+   * @param {Object} parsedMessage - 解析后的消息
+   * @param {string} senderId - 发送者 ID
+   * @returns {Object} 格式化后的消息对象
+   */
+  _formatMessageForDisplay(parsedMessage, senderId) {
+    const timestamp = Date.now();
+    const messageId = `rtm_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // 基础消息格式
+    const baseMessage = {
+      ID: messageId,
+      type: parsedMessage.type || RTM_MSG_TYPE.TEXT,
+      from: senderId,
+      to: this.currentUserId,
+      time: Math.floor(timestamp / 1000),
+      sequence: timestamp,
+      random: Math.floor(Math.random() * 1000000),
+      conversationID: `C2C${senderId}`,
+      payload: parsedMessage.payload || { text: '' },
+      isRTMMessage: true  // 标记为 RTM 消息
+    };
+
+    // 如果是自定义消息（如礼物），添加 customData
+    if (parsedMessage.type === RTM_MSG_TYPE.CUSTOM || parsedMessage.customType) {
+      baseMessage.type = RTM_MSG_TYPE.CUSTOM;
+      baseMessage.customData = parsedMessage.customData || parsedMessage;
+    }
+
+    return baseMessage;
+  }
+
+  /**
+   * 发送文本消息到频道 (RTM 1.x 使用 channel.sendMessage)
+   * @param {string} text - 消息文本
+   * @returns {Promise<Object>} 发送的消息对象
+   */
+  async sendTextMessage(text) {
+    if (!this.rtmChannel || !this.isJoinedChannel) {
+      throw new Error('RTM 频道未加入');
+    }
+      console.log("RTM 频道",this.rtmChannel)
+
+    try {
+      const messageContent = {
+        type: RTM_MSG_TYPE.TEXT,
+        payload: { text: text }
+      };
+
+      // RTM 1.x 使用 { text: '...' } 格式
+      const message = { text: JSON.stringify(messageContent) };
+      await this.rtmChannel.sendMessage(message);
+
+      console.log('[📨AgoraRTMManager] ✅ 文本消息发送成功:', text);
+
+      // 返回格式化的消息对象（用于本地显示）
+      return this._formatMessageForDisplay(messageContent, this.currentUserId);
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 发送文本消息失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 发送礼物消息到频道 (RTM 1.x 使用 channel.sendMessage)
+   * @param {Object} gift - 礼物信息
+   * @returns {Promise<Object>} 发送的消息对象
+   */
+  async sendGiftMessage(gift) {
+    if (!this.rtmChannel || !this.isJoinedChannel) {
+      throw new Error('RTM 频道未加入');
+    }
+
+    try {
+      const messageContent = {
+        type: RTM_MSG_TYPE.CUSTOM,
+        customType: RTM_MSG_TYPE.GIFT,
+        customData: {
+          type: RTM_MSG_TYPE.GIFT,
+          customType: RTM_MSG_TYPE.GIFT,
+          content: gift,
+          ...gift
+        }
+      };
+
+      // RTM 1.x 使用 { text: '...' } 格式
+      const message = { text: JSON.stringify(messageContent) };
+      await this.rtmChannel.sendMessage(message);
+
+      console.log('[📨AgoraRTMManager] ✅ 礼物消息发送成功:', gift);
+
+      // 返回格式化的消息对象（用于本地显示）
+      return this._formatMessageForDisplay(messageContent, this.currentUserId);
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 发送礼物消息失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 发送自定义消息到频道 (RTM 1.x 使用 channel.sendMessage)
+   * @param {Object} customData - 自定义数据
+   * @param {number} customType - 自定义消息类型
+   * @returns {Promise<Object>} 发送的消息对象
+   */
+  async sendCustomMessage(customData, customType) {
+    if (!this.rtmChannel || !this.isJoinedChannel) {
+      throw new Error('RTM 频道未加入');
+    }
+
+    try {
+      const messageContent = {
+        type: RTM_MSG_TYPE.CUSTOM,
+        customType: customType,
+        customData: customData
+      };
+
+      // RTM 1.x 使用 { text: '...' } 格式
+      const message = { text: JSON.stringify(messageContent) };
+      await this.rtmChannel.sendMessage(message);
+
+      console.log('[📨AgoraRTMManager] ✅ 自定义消息发送成功:', customData);
+
+      // 返回格式化的消息对象（用于本地显示）
+      return this._formatMessageForDisplay(messageContent, this.currentUserId);
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 发送自定义消息失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 设置消息接收回调
+   * @param {Function} callback - 回调函数
+   */
+  onMessageReceived(callback) {
+    this.onMessageCallback = callback;
+  }
+
+  /**
+   * 移除消息接收回调
+   */
+  offMessageReceived() {
+    this.onMessageCallback = null;
+  }
+
+  /**
+   * 判断是否是自己发送的消息
+   * @param {string} userId - 用户 ID
+   * @returns {boolean}
+   */
+  isSelf(userId) {
+    return String(userId) === String(this.currentUserId);
+  }
+
+  /**
+   * 获取当前用户 ID
+   * @returns {string}
+   */
+  getCurrentUserId() {
+    return this.currentUserId;
+  }
+
+  /**
+   * 销毁频道（离开通话时调用，不登出 RTM）
+   * 注意：这个方法只离开频道，不会登出 RTM，RTM 保持登录状态
+   */
+  async destroy() {
+    console.log('[📨AgoraRTMManager] 开始销毁频道...');
+
+    try {
+      // 离开频道
+      await this.leaveChannel();
+    } catch (error) {
+      console.error('[📨AgoraRTMManager] 销毁频道出错:', error);
+    }
+
+    console.log('[📨AgoraRTMManager] ✅ 频道销毁完成');
+  }
+
+  /**
+   * 检查是否已登录
+   * @returns {boolean}
+   */
+  checkLoggedIn() {
+    return this.isLoggedIn;
+  }
+
+  /**
+   * 检查是否已加入频道
+   * @returns {boolean}
+   */
+  checkJoinedChannel() {
+    return this.isJoinedChannel;
+  }
+}
+
+// 导出单例
+export default AgoraRTMManager.getInstance();

@@ -1,0 +1,32 @@
+{
+    "editor.quickSuggestions": false,
+    // Flutter 和 Dart 配置
+    "dart.flutterSdkPath": "/Users/john/develop/flutter", // Flutter SDK 路径
+    "dart.debugExternalPackageLibraries": false,
+    "dart.debugSdkLibraries": false,
+    "dart.previewFlutterUiGuides": true,
+    "dart.previewFlutterUiGuidesCustomTracking": true,
+    "dart.lineLength": 120,
+    "dart.enableSdkFormatter": true,
+    "dart.enableSnippets": true,
+    "dart.analysisExcludedFolders": [
+        ".dart_tool",
+        ".flutter-plugins",
+        ".flutter-plugins-dependencies",
+        "build"
+    ],
+    // Flutter 特定设置
+    "files.associations": {
+        "*.dart": "dart"
+    },
+    "[dart]": {
+        "editor.formatOnSave": true,
+        "editor.formatOnType": true,
+        "editor.rulers": [120],
+        "editor.selectionHighlight": false,
+        "editor.suggest.snippetsPreventQuickSuggestions": false,
+        "editor.suggestSelection": "first",
+        "editor.tabCompletion": "onlySnippets",
+        "editor.wordBasedSuggestions": "off"
+    }
+}
